@@ -1,4 +1,4 @@
-namespace AsyncExplorer
+namespace AsyncExplorer.Model
     {
     public class FileItem
         {
@@ -6,12 +6,12 @@ namespace AsyncExplorer
         required public string FullPath { get; set; }
         public bool IsDirectory { get; set; }
         public override string ToString()
-        {
-            if (AppSettings.UseIcons)
             {
+            if (AppSettings.UseIcons)
+                {
                 return $"{(IsDirectory ? "[📁]" : "[💽]")} {Name}";
-            }
+                }
             return $"{(IsDirectory ? "[DIR]" : "[FILE]")} {Name}";
+            }
         }
     }
-}
