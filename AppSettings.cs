@@ -1,34 +1,122 @@
-﻿using System;
+using System.Runtime.Versioning;
 using Microsoft.Win32;
-namespace AsyncExplorer;
 
-public static class AppSettings
+namespace AsyncExplorer
     {
-    private const string RegPath = @"Software\Kronos\AsyncExplorer";
-    private const string LogTypeKey = "UseEventViewer";
-
-    // Returns true for Event Viewer, false for Text File
-    public static bool UseEventViewer
+    [SupportedOSPlatform("windows")]
+    public static class AppSettings
         {
-        get
+        private const string RegPath = @"Software\Kronos\AsyncExplorer";
+        private const string LogTypeKey = "UseEventViewer";
+        private const string ShowHiddenKey = "ShowHiddenFiles";
+        private const string UseIconsKey = "UseIcons";
+
+        public static bool ShowHiddenFiles
             {
-#pragma warning disable CS8600 // Converting null literal or possible null value to non-nullable type.
-            using RegistryKey key = Registry.CurrentUser.OpenSubKey(RegPath);
-#pragma warning restore CS8600 // Converting null literal or possible null value to non-nullable type.
-            if (key != null)
+            get
                 {
-#pragma warning disable CS8600 // Converting null literal or possible null value to non-nullable type.
-                object value = key.GetValue(name: LogTypeKey);
-#pragma warning restore CS8600 // Converting null literal or possible null value to non-nullable type.
-                if (value != null) return (int)value == 1;
+                try
+                    {
+                    using RegistryKey? key = Registry.CurrentUser.OpenSubKey(RegPath);
+                    if (key != null)
+                        {
+                        object? value = key.GetValue(ShowHiddenKey);
+                        if (value is int intValue) return intValue == 1;
+                        }
+                    }
+                catch { }
+                return false;
                 }
-            return false; // Default to Text File
-            }
-        set
-            {
-            using (RegistryKey key = Registry.CurrentUser.CreateSubKey(RegPath))
+            set
                 {
-                key.SetValue(LogTypeKey, value ? 1 : 0, RegistryValueKind.DWord);
+                try
+                    {
+                    using RegistryKey key = Registry.CurrentUser.CreateSubKey(RegPath);
+                    key.SetValue(ShowHiddenKey, value ? 1 : 0, RegistryValueKind.DWord);
+                    }
+                catch { }
+                }
+            }
+
+        public static bool UseEventViewer
+            {
+            get
+                {
+                try
+                    {
+                    using RegistryKey? key = Registry.CurrentUser.OpenSubKey(RegPath);
+                    if (key != null)
+                        {
+                        object? value = key.GetValue(LogTypeKey);
+                        if (value is int intValue) return intValue == 1;
+                        }
+                    }
+                catch { }
+                return false;
+                }
+            set
+                {
+                try
+                    {
+                    using RegistryKey key = Registry.CurrentUser.CreateSubKey(RegPath);
+                    key.SetValue(LogTypeKey, value ? 1 : 0, RegistryValueKind.DWord);
+                    }
+                catch { }
+                }
+            }
+
+        public static bool UseIcons
+            {
+            get
+                {
+                try
+                    {
+                    using RegistryKey? key = Registry.CurrentUser.OpenSubKey(RegPath);
+                    if (key != null)
+                        {
+                        object? value = key.GetValue(UseIconsKey);
+                        if (value is int intValue) return intValue == 1;
+                        }
+                    }
+                catch { }
+                return true; // Default to true
+                }
+            set
+                {
+                try
+                    {
+                    using RegistryKey key = Registry.CurrentUser.CreateSubKey(RegPath);
+                    key.SetValue(UseIconsKey, value ? 1 : 0, RegistryValueKind.DWord);
+                    }
+                catch { }
+                }
+            }
+
+        public static bool HomeOrRoot
+            {
+            get
+                {
+                try
+                    {
+                    using RegistryKey? key = Registry.CurrentUser.OpenSubKey(RegPath);
+                    if (key != null)
+                        {
+                        object? value = key.GetValue("HomeOrRoot");
+                        if (value is int intValue) return intValue == 1;
+                        }
+                    }
+                catch { }
+                return true; // Default to true (Home)
+                }
+            set
+                {
+                try
+                    {
+                    using RegistryKey key = Registry.CurrentUser.CreateSubKey(RegPath);
+                    key.SetValue("HomeOrRoot", value ? 1 : 0, RegistryValueKind.DWord);
+                    }
+                catch { }
+
                 }
             }
         }
