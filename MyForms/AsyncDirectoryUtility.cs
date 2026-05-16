@@ -10,11 +10,15 @@ namespace AsyncExplorer
 		private Button _btnhome;
 		private Button _btnBack;
 		private Button _btnRoot;
+		private Button _btncancel;
 		private TextBox _pathInput;
 		private Label _statusLabel;
 		private Stack<string> _navigationStack = new Stack<string>();
 		private Panel _searchpanel;
 		private Panel _infopanel;
+		private FlowLayoutPanel _sidepannel;
+		private SplitContainer _mainSplit;
+		private AsyncDirectoryController _controller;
 		private ContextMenuStrip _contextMenu;
 
 		public AsyncDirectoryUtility()
@@ -70,7 +74,20 @@ namespace AsyncExplorer
 				{
 				Height = 60,
 				Dock = DockStyle.Top,
-				Padding = new Padding(10)
+				Padding = new Padding(10),
+				// Add a top margin so the search panel sits lower inside the right pane
+				Margin = new Padding(10, 50, 10, 10)
+				};
+
+			// Use a FlowLayoutPanel so buttons stack vertically in a list on the left
+			_sidepannel = new FlowLayoutPanel
+				{
+				Width = 60,
+				Dock = DockStyle.Fill,
+				Padding = new Padding(10),
+				AutoScroll = true,
+				FlowDirection = FlowDirection.TopDown,
+				WrapContents = false
 				};
 
 			// 2. Setup the Bottom Panel
@@ -86,7 +103,7 @@ namespace AsyncExplorer
 				{
 				Dock = DockStyle.Fill,
 				Font = new Font("Consolas", 12),
-				IntegralHeight = false,
+				//IntegralHeight = false,
 				ContextMenuStrip = _contextMenu
 				};
 
@@ -110,26 +127,36 @@ namespace AsyncExplorer
 			_btnhome = new Button
 				{
 				Text = "Home",
-				Location = new Point(30, 13),
-				Anchor = AnchorStyles.Top | AnchorStyles.Right
+				Height = 36,
+				Width = 100,
+				Margin = new Padding(0, 0, 0, 6)
 				};
 
 			// 7. Setup Back button
 			_btnBack = new Button
 				{
 				Text = "Back",
-				Dock = DockStyle.Right,
+				Height = 36,
 				Width = 100,
-				Enabled = false
+				Margin = new Padding(0, 50, 0, 6) // add top margin so this first visible button isn't clipped
 				};
 
 			// 8. Setup Root button
 			_btnRoot = new Button
 				{
 				Text = "Root",
-				Dock = DockStyle.Right,
+				Height = 36,
 				Width = 100,
+				Margin = new Padding(0, 0, 0, 6),
 				Enabled = true
+				};
+
+			_btncancel = new Button
+				{
+				Text = "Cancel",
+				Width = 100,
+				Enabled = true,
+				Dock = DockStyle.Right
 				};
 
 			// 9. Setup Status Label
@@ -141,68 +168,101 @@ namespace AsyncExplorer
 				Height = 20
 				};
 
-			// Wire up events
-			_btnScan.Click += async (s, e) => await StartScanAsync(_pathInput.Text);
-			_btnhome.Click += (s, e) => GoHome();
-			_btnBack.Click += (s, e) => GoBack();
-			_btnRoot.Click += (s, e) => GoRoot();
+#pragma warning disable CS8602 // Dereference of a possibly null reference.
+			// Wire up events (these will delegate to the controller)
+			_btnScan.Click += async (s, e) => await _controller.StartScanAsync(_pathInput.Text);
+			_btnhome.Click += async (s, e) => await _controller.GoHome();
+			_btnBack.Click += async (s, e) => await _controller.GoBack();
+			_btnRoot.Click += async (s, e) => await _controller.GoRoot();
+#pragma warning restore CS8602 // Dereference of a possibly null reference.
+			_btncancel.Click += (s, e) => BtnCancel_Click(s);
 
 			// --- Adding Controls to Panels ---
 			_searchpanel.Controls.Add(_btnScan);
-			_searchpanel.Controls.Add(_btnhome);
 			_searchpanel.Controls.Add(_pathInput);
 
-			_infopanel.Controls.Add(_btnBack);
-			_infopanel.Controls.Add(_btnRoot);
 			_infopanel.Controls.Add(_statusLabel);
+			_infopanel.Controls.Add(_btncancel);
 
-			// --- Adding Panels to Form ---
-			this.Controls.Add(_fileList);
-			this.Controls.Add(_searchpanel);
-			this.Controls.Add(_infopanel);
+			_sidepannel.Controls.Add(_btnBack);
+			_sidepannel.Controls.Add(_btnRoot);
+			_sidepannel.Controls.Add(_btnhome);
+
+			// Create a SplitContainer so the left side panel never overlaps the file list.
+			// We'll set a small Panel1MinSize so the user can resize; the initial
+			// SplitterDistance is applied later in Load to account for final layout.
+			_mainSplit = new SplitContainer
+				{
+				Dock = DockStyle.Fill,
+				Orientation = Orientation.Vertical,
+				SplitterDistance = 140,
+				IsSplitterFixed = false,
+				Panel1MinSize = 30
+				};
+
+			// Put the side panel in the left pane. Add the search panel to the right pane
+			// above the file list so it won't overlap the list.
+			_mainSplit.Panel1.Controls.Add(_sidepannel);
+			// Create a container for the right pane so the search panel docks above the file list
+			var rightContainer = new Panel
+				{
+				Dock = DockStyle.Fill
+				};
+
+			// Ensure search panel docks to top inside the right container and file list fills below it
+			_searchpanel.Dock = DockStyle.Top;
+			_fileList.Dock = DockStyle.Fill;
+
+			rightContainer.Controls.Add(_fileList);
+			rightContainer.Controls.Add(_searchpanel);
+
+			_mainSplit.Panel2.Controls.Add(rightContainer);
+
+			// Instantiate controller now that controls are created
+			_controller = new AsyncDirectoryController(_fileList, _pathInput, _statusLabel,
+				_btnScan, _btnBack, _btnhome, _btnRoot, LogError);
+
+			// Let controller wire-up listbox double-click
+			_controller.SetupListBox();
+
+			// Add controls to the form: main split fills, then info panel docks to bottom
+			this.Controls.Add(_mainSplit);   // Fill remaining
+			this.Controls.Add(_infopanel);   // Bottom
 
 			this.Load += Utility_Load;
 			}
 
-		private async Task StartScanAsync(string path, bool isBackNavigation = false)
+		private void SetInitialSplitterDistance()
 			{
-			if (!isBackNavigation && !string.IsNullOrEmpty(_pathInput.Text))
+			// Compute desired left pane width based on button widths + padding so it only
+			// starts as wide as the buttons inside it.
+			int maxButtonWidth = 0;
+			foreach (Control c in new Control[] { _btnBack, _btnRoot, _btnhome })
 				{
-				_navigationStack.Push(_pathInput.Text);
-				_btnBack.Enabled = true;
+				if (c != null)
+					{
+					maxButtonWidth = Math.Max(maxButtonWidth, c.Width);
+					}
 				}
-			_fileList.Items.Clear();
-			_btnScan.Enabled = false;
-			_statusLabel.Text = "Scanning...";
+			int desiredLeftWidth = maxButtonWidth + _sidepannel.Padding.Left + _sidepannel.Padding.Right + 8; // small buffer
+																											  // Account for a possible vertical scrollbar
+			desiredLeftWidth += System.Windows.Forms.SystemInformation.VerticalScrollBarWidth;
 
-			var progress = new Progress<FileItem>(fileName =>
+			if (desiredLeftWidth < 60) desiredLeftWidth = 60;
+
+			// Use BeginInvoke to set the splitter distance after initial layout so the
+			// control sizes are accurate and the splitter remains adjustable.
+			this.BeginInvoke(() =>
 			{
-				_fileList.Items.Add(fileName);
-				_fileList.TopIndex = _fileList.Items.Count - 1;
+				_mainSplit.SplitterDistance = desiredLeftWidth;
+				_mainSplit.Panel1MinSize = 30; // keep user adjustment available
 			});
-
-			try
-				{
-				await Task.Run(() => PerformFilesystemWork(path, progress));
-				_statusLabel.Text = $"Done! Found {_fileList.Items.Count} items.";
-				}
-			catch (Exception ex)
-				{
-				MessageBox.Show($"Error: {ex.Message}");
-				LogError(ex);
-				_statusLabel.Text = "Error occurred.";
-				}
-			finally
-				{
-				_btnScan.Enabled = true;
-				SetupListBox();
-				}
 			}
 
-		private void SetupListBox()
+		private async Task StartScanAsync(string path, bool isBackNavigation = false)
 			{
-			_fileList.MouseDoubleClick -= OnItemDoubleClick; // Avoid multiple subscriptions
-			_fileList.MouseDoubleClick += OnItemDoubleClick;
+			// Delegate to controller
+			await _controller.StartScanAsync(path, isBackNavigation);
 			}
 
 		private async void OnItemDoubleClick(object? sender, MouseEventArgs e)
@@ -237,74 +297,12 @@ namespace AsyncExplorer
 				}
 			}
 
-		private async void GoBack()
-			{
-			if (_navigationStack.Count == 0) return;
-			string previousPath = _navigationStack.Pop();
-			await StartScanAsync(previousPath, isBackNavigation: true);
-			if (_navigationStack.Count == 0)
-				{
-				_btnBack.Enabled = false;
-				}
-			}
-
-		private async void GoHome()
-			{
-			string homePath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-			await StartScanAsync(homePath);
-			if (AppSettings.HomeOrRoot)
-				{
-				_btnhome.Enabled = true;
-				_btnRoot.Enabled = false;
-				}
-			}
-
-		private async void GoRoot()
-			{
-			string rootPath = Path.GetPathRoot(Environment.SystemDirectory) ?? @"C:\";
-			await StartScanAsync(rootPath);
-			}
-
 		private async void Utility_Load(object? sender, EventArgs e)
 			{
 			string homePath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 			_pathInput.Text = homePath;
 			await StartScanAsync(homePath);
-			}
-
-		private void PerformFilesystemWork(string path, IProgress<FileItem> progress)
-			{
-			try
-				{
-				DirectoryInfo dir = new DirectoryInfo(path);
-				if (!dir.Exists) return;
-
-				foreach (var info in dir.GetFileSystemInfos())
-					{
-					try
-						{
-						if (!AppSettings.ShowHiddenFiles && (info.Attributes & FileAttributes.Hidden) != 0)
-							{
-							continue;
-							}
-
-						progress.Report(new FileItem
-							{
-							Name = info.Name,
-							FullPath = info.FullName,
-							IsDirectory = (info.Attributes & FileAttributes.Directory) != 0
-							});
-						}
-					catch (UnauthorizedAccessException uae)
-						{
-						LogError(uae);
-						}
-					}
-				}
-			catch (Exception ex)
-				{
-				LogError(ex);
-				}
+			SetInitialSplitterDistance();
 			}
 
 		private void LogException(Exception ex)
@@ -349,6 +347,11 @@ namespace AsyncExplorer
 				{
 				LogException(ex);
 				}
+			}
+
+		private void BtnCancel_Click(object? sender)
+			{
+			this.Close();
 			}
 
 		private void settingsMenuItem_Click(object? sender, EventArgs e)

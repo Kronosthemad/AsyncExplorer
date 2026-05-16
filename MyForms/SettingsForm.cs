@@ -84,6 +84,7 @@ namespace AsyncExplorer
 			AppSettings.UseEventViewer = _chkUseEventViewer.Checked;
 			AppSettings.ShowHiddenFiles = _chkShowHidden.Checked;
 			AppSettings.UseIcons = _chkUseIcons.Checked;
+			AppSettings.HomeOrRoot = _chkHomeOrRoot.Checked;
 			this.Close();
 			}
 		}
