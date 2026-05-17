@@ -1,3 +1,5 @@
+using AsyncExplorer.Services;
+
 namespace AsyncExplorer.Model
     {
     public class FileItem

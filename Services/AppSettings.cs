@@ -1,7 +1,7 @@
 using System.Runtime.Versioning;
 using Microsoft.Win32;
 
-namespace AsyncExplorer.Model
+namespace AsyncExplorer.Services
 	{
 	[SupportedOSPlatform("windows")]
 	public static class AppSettings

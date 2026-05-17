@@ -7,19 +7,19 @@ namespace AsyncExplorer
         {
             Application.ThreadException += (s, e) =>
             {
-                new AsyncDirectoryUtility().LogError(e.Exception);
+                new AsyncDirectoryForm().LogError(e.Exception);
                 MessageBox.Show($"UI error: {e.Exception.Message}");
             };
 
             AppDomain.CurrentDomain.UnhandledException += (s, e) =>
             {
                 Exception ex = e.ExceptionObject as Exception ?? new Exception("Unknown error");
-                new AsyncDirectoryUtility().LogError(ex);
+                new AsyncDirectoryForm().LogError(ex);
                 MessageBox.Show($"Unhandled error: {ex.Message}");
             };
 
             ApplicationConfiguration.Initialize();
-            Application.Run(new AsyncDirectoryUtility());
+            Application.Run(new AsyncDirectoryForm());
         }
     }
 }

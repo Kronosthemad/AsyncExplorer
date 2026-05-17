@@ -1,4 +1,4 @@
-using AsyncExplorer.Model;
+using AsyncExplorer.Services;
 
 namespace AsyncExplorer
 	{

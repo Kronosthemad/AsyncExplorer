@@ -1,9 +1,10 @@
 using System.Diagnostics;
 using AsyncExplorer.Model;
+using AsyncExplorer.Services;
 
 namespace AsyncExplorer
 	{
-	public class AsyncDirectoryUtility : Form
+	public class AsyncDirectoryForm : Form
 		{
 		private ListBox _fileList;
 		private Button _btnScan;
@@ -21,7 +22,7 @@ namespace AsyncExplorer
 		private AsyncDirectoryController _controller;
 		private ContextMenuStrip _contextMenu;
 
-		public AsyncDirectoryUtility()
+		public AsyncDirectoryForm()
 			{
 			this.Text = "Async Internal Explorer";
 			this.Size = new Size(700, 550);
