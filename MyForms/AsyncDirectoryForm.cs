@@ -9,6 +9,7 @@ namespace AsyncExplorer
 		private ListBox _fileList;
 		private Button _btnScan;
 		private Button _btnhome;
+		private Button _btnDrives;
 		private Button _btnBack;
 		private Button _btnRoot;
 		private Button _btncancel;
@@ -42,9 +43,6 @@ namespace AsyncExplorer
 							{
 							if (selectedItem.IsDirectory)
 								{
-#pragma warning disable CS8602 // Dereference of a possibly null reference.
-								_pathInput.Text = selectedItem.FullPath;
-#pragma warning restore CS8602 // Dereference of a possibly null reference.
 								await StartScanAsync(selectedItem.FullPath);
 								}
 							else
@@ -133,6 +131,15 @@ namespace AsyncExplorer
 				Margin = new Padding(0, 0, 0, 6)
 				};
 
+			// Drives button
+			_btnDrives = new Button
+				{
+				Text = "This PC",
+				Height = 36,
+				Width = 100,
+				Margin = new Padding(0, 0, 0, 6)
+				};
+
 			// 7. Setup Back button
 			_btnBack = new Button
 				{
@@ -173,6 +180,7 @@ namespace AsyncExplorer
 			// Wire up events (these will delegate to the controller)
 			_btnScan.Click += async (s, e) => await _controller.StartScanAsync(_pathInput.Text);
 			_btnhome.Click += async (s, e) => await _controller.GoHome();
+			_btnDrives.Click += async (s, e) => await _controller.GoDrives();
 			_btnBack.Click += async (s, e) => await _controller.GoBack();
 			_btnRoot.Click += async (s, e) => await _controller.GoRoot();
 #pragma warning restore CS8602 // Dereference of a possibly null reference.
@@ -188,6 +196,7 @@ namespace AsyncExplorer
 			_sidepannel.Controls.Add(_btnBack);
 			_sidepannel.Controls.Add(_btnRoot);
 			_sidepannel.Controls.Add(_btnhome);
+			_sidepannel.Controls.Add(_btnDrives);
 
 			// Create a SplitContainer so the left side panel never overlaps the file list.
 			// We'll set a small Panel1MinSize so the user can resize; the initial
@@ -230,7 +239,47 @@ namespace AsyncExplorer
 			this.Controls.Add(_mainSplit);   // Fill remaining
 			this.Controls.Add(_infopanel);   // Bottom
 
+			ApplyTheme();
 			this.Load += Utility_Load;
+			}
+
+		private void ApplyTheme()
+			{
+			bool isDark = AppSettings.DarkMode;
+			Color bgColor = isDark ? Color.FromArgb(30, 30, 30) : SystemColors.Control;
+			Color fgColor = isDark ? Color.White : SystemColors.ControlText;
+			Color listBg = isDark ? Color.FromArgb(45, 45, 48) : SystemColors.Window;
+			Color btnBg = isDark ? Color.FromArgb(60, 60, 60) : SystemColors.Control;
+
+			this.BackColor = bgColor;
+			this.ForeColor = fgColor;
+
+			_searchpanel.BackColor = bgColor;
+			_infopanel.BackColor = bgColor;
+			_sidepannel.BackColor = bgColor;
+
+			_fileList.BackColor = listBg;
+			_fileList.ForeColor = fgColor;
+
+			_pathInput.BackColor = listBg;
+			_pathInput.ForeColor = fgColor;
+
+			_statusLabel.ForeColor = fgColor;
+
+			foreach (Control c in new Control[] { _btnScan, _btnhome, _btnDrives, _btnBack, _btnRoot, _btncancel })
+				{
+				c.BackColor = btnBg;
+				c.ForeColor = fgColor;
+				if (c is Button btn)
+					{
+					btn.FlatStyle = isDark ? FlatStyle.Flat : FlatStyle.Standard;
+					btn.FlatAppearance.BorderColor = Color.FromArgb(100, 100, 100);
+					}
+				}
+
+			// Ensure Cancel button is always red
+			_btncancel.BackColor = isDark ? Color.FromArgb(180, 0, 0) : Color.Tomato;
+			_btncancel.ForeColor = Color.White;
 			}
 
 		private void SetInitialSplitterDistance()
@@ -238,7 +287,7 @@ namespace AsyncExplorer
 			// Compute desired left pane width based on button widths + padding so it only
 			// starts as wide as the buttons inside it.
 			int maxButtonWidth = 0;
-			foreach (Control c in new Control[] { _btnBack, _btnRoot, _btnhome })
+			foreach (Control c in new Control[] { _btnBack, _btnRoot, _btnhome, _btnDrives })
 				{
 				if (c != null)
 					{
@@ -278,7 +327,6 @@ namespace AsyncExplorer
 				{
 				if (item.IsDirectory)
 					{
-					_pathInput.Text = item.FullPath;
 					await StartScanAsync(item.FullPath);
 					}
 				else
@@ -355,12 +403,16 @@ namespace AsyncExplorer
 			this.Close();
 			}
 
-		private void settingsMenuItem_Click(object? sender, EventArgs e)
+		private async void settingsMenuItem_Click(object? sender, EventArgs e)
 			{
 			using (var diag = new SettingsForm())
 				{
-				diag.ShowDialog();
-				// Settings are saved in the dialog
+				if (diag.ShowDialog() == DialogResult.OK)
+					{
+					ApplyTheme();
+					// Refresh the current view if settings were saved
+					await StartScanAsync(_pathInput.Text);
+					}
 				}
 			}
 		}

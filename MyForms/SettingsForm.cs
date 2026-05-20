@@ -8,13 +8,14 @@ namespace AsyncExplorer
 		private CheckBox _chkShowHidden;
 		private CheckBox _chkUseIcons;
 		private CheckBox _chkHomeOrRoot;
+		private CheckBox _chkDarkMode;
 		private Button _btnOK;
 		private Label _lblInfo;
 
 		public SettingsForm()
 			{
 			this.Text = "Settings";
-			this.Size = new Size(350, 350);
+			this.Size = new Size(350, 400);
 			this.FormBorderStyle = FormBorderStyle.FixedDialog;
 			this.MaximizeBox = false;
 			this.MinimizeBox = false;
@@ -60,10 +61,18 @@ namespace AsyncExplorer
 				Checked = AppSettings.HomeOrRoot
 				};
 
+			_chkDarkMode = new CheckBox
+				{
+				Text = "Enable Dark Mode",
+				Location = new Point(20, 170),
+				Width = 250,
+				Checked = AppSettings.DarkMode
+				};
+
 			_btnOK = new Button
 				{
 				Text = "OK",
-				Location = new Point(100, 170),
+				Location = new Point(100, 210),
 				DialogResult = DialogResult.OK,
 				Size = new Size(80, 30)
 				};
@@ -74,9 +83,34 @@ namespace AsyncExplorer
 			this.Controls.Add(_chkShowHidden);
 			this.Controls.Add(_chkUseIcons);
 			this.Controls.Add(_chkHomeOrRoot);
+			this.Controls.Add(_chkDarkMode);
 			this.Controls.Add(_btnOK);
 
+			ApplyTheme();
 			this.AcceptButton = _btnOK;
+			}
+
+		private void ApplyTheme()
+			{
+			bool isDark = AppSettings.DarkMode;
+			Color bgColor = isDark ? Color.FromArgb(30, 30, 30) : SystemColors.Control;
+			Color fgColor = isDark ? Color.White : SystemColors.ControlText;
+			Color btnBg = isDark ? Color.FromArgb(60, 60, 60) : SystemColors.Control;
+
+			this.BackColor = bgColor;
+			this.ForeColor = fgColor;
+
+			_lblInfo.ForeColor = fgColor;
+			_chkUseEventViewer.ForeColor = fgColor;
+			_chkShowHidden.ForeColor = fgColor;
+			_chkUseIcons.ForeColor = fgColor;
+			_chkHomeOrRoot.ForeColor = fgColor;
+			_chkDarkMode.ForeColor = fgColor;
+
+			_btnOK.BackColor = btnBg;
+			_btnOK.ForeColor = fgColor;
+			_btnOK.FlatStyle = isDark ? FlatStyle.Flat : FlatStyle.Standard;
+			_btnOK.FlatAppearance.BorderColor = Color.FromArgb(100, 100, 100);
 			}
 
 		private void BtnOK_Click(object? sender, EventArgs e)
@@ -85,6 +119,7 @@ namespace AsyncExplorer
 			AppSettings.ShowHiddenFiles = _chkShowHidden.Checked;
 			AppSettings.UseIcons = _chkUseIcons.Checked;
 			AppSettings.HomeOrRoot = _chkHomeOrRoot.Checked;
+			AppSettings.DarkMode = _chkDarkMode.Checked;
 			this.Close();
 			}
 		}

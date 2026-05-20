@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using AsyncExplorer.Model;
 
-namespace AsyncExplorer
+namespace AsyncExplorer.Services
 	{
 	public class AsyncDirectoryController
 		{
@@ -51,7 +51,6 @@ namespace AsyncExplorer
 				{
 				if (item.IsDirectory)
 					{
-					_pathInput.Text = item.FullPath;
 					_ = StartScanAsync(item.FullPath);
 					}
 				else
@@ -73,15 +72,25 @@ namespace AsyncExplorer
 
 		public async Task StartScanAsync(string path, bool isBackNavigation = false)
 			{
-			if (!isBackNavigation && !string.IsNullOrEmpty(_pathInput.Text))
+			string currentUIPath = _pathInput.Text;
+			string normalizedTarget = path == "::DRIVES::" ? "This PC" : path;
+
+			if (!isBackNavigation && !string.IsNullOrEmpty(currentUIPath))
 				{
-				_navigationStack.Push(_pathInput.Text);
-				_btnBack.Enabled = true;
+				// Only push to stack if we are actually moving to a new location
+				if (currentUIPath != normalizedTarget)
+					{
+					_navigationStack.Push(currentUIPath);
+					_btnBack.Enabled = true;
+					}
 				}
+
+			// Update the address bar automatically
+			_pathInput.Text = normalizedTarget;
 
 			_fileList.Items.Clear();
 			_btnScan.Enabled = false;
-			_statusLabel.Text = "Scanning...";
+			_statusLabel.Text = path == "::DRIVES::" ? "Listing Drives..." : "Scanning...";
 
 			var progress = new Progress<FileItem>(fileName =>
 			{
@@ -92,7 +101,7 @@ namespace AsyncExplorer
 			try
 				{
 				await Task.Run(() => PerformFilesystemWork(path, progress));
-				_statusLabel.Text = $"Done! Found {_fileList.Items.Count} items.";
+				_statusLabel.Text = path == "::DRIVES::" ? $"Found {_fileList.Items.Count} drives." : $"Done! Found {_fileList.Items.Count} items.";
 				}
 			catch (Exception ex)
 				{
@@ -121,6 +130,23 @@ namespace AsyncExplorer
 			{
 			try
 				{
+				if (path == "::DRIVES::")
+					{
+					foreach (var drive in DriveInfo.GetDrives())
+						{
+						if (drive.IsReady)
+							{
+							progress.Report(new FileItem
+								{
+								Name = $"{drive.Name} {(string.IsNullOrEmpty(drive.VolumeLabel) ? "" : $"({drive.VolumeLabel})")}",
+								FullPath = drive.RootDirectory.FullName,
+								IsDirectory = true
+								});
+							}
+						}
+					return;
+					}
+
 				DirectoryInfo dir = new DirectoryInfo(path);
 				if (!dir.Exists) return;
 
@@ -128,7 +154,8 @@ namespace AsyncExplorer
 					{
 					try
 						{
-						if (!AppSettings.ShowHiddenFiles && (info.Attributes & FileAttributes.Hidden) != 0)
+						// Skip hidden files or files starting with a dot if the setting is disabled
+						if (!AppSettings.ShowHiddenFiles && ((info.Attributes & FileAttributes.Hidden) != 0 || info.Name.StartsWith(".", StringComparison.Ordinal)))
 							{
 							continue;
 							}
@@ -181,8 +208,26 @@ namespace AsyncExplorer
 
 		public async Task GoRoot()
 			{
-			string rootPath = Path.GetPathRoot(Environment.SystemDirectory) ?? @"C:\";
+			string currentPath = _pathInput.Text;
+			string? rootPath = null;
+
+			if (!string.IsNullOrEmpty(currentPath) && currentPath != "This PC")
+				{
+				try
+					{
+					rootPath = Path.GetPathRoot(currentPath);
+					}
+				catch { }
+				}
+
+			// Fallback to system drive root if current path is invalid or has no root
+			if (string.IsNullOrEmpty(rootPath))
+				{
+				rootPath = Path.GetPathRoot(Environment.SystemDirectory) ?? @"C:\";
+				}
+
 			await StartScanAsync(rootPath);
+
 			if (AppSettings.HomeOrRoot)
 				{
 				_btnHome.Enabled = true;
@@ -193,6 +238,11 @@ namespace AsyncExplorer
 				_btnHome.Enabled = false;
 				_btnRoot.Enabled = false;
 				}
+			}
+
+		public async Task GoDrives()
+			{
+			await StartScanAsync("::DRIVES::");
 			}
 		}
 	}

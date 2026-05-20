@@ -11,6 +11,34 @@ namespace AsyncExplorer.Services
 		private const string ShowHiddenKey = "ShowHiddenFiles";
 		private const string UseIconsKey = "UseIcons";
 		private const string HomeOrRootKey = "HomeOrRoot";
+		private const string DarkModeKey = "DarkMode";
+
+		public static bool DarkMode
+			{
+			get
+				{
+				try
+					{
+					using RegistryKey? key = Registry.CurrentUser.OpenSubKey(RegPath);
+					if (key != null)
+						{
+						object? value = key.GetValue(DarkModeKey);
+						if (value is int intValue) return intValue == 1;
+						}
+					}
+				catch { }
+				return false;
+				}
+			set
+				{
+				try
+					{
+					using RegistryKey key = Registry.CurrentUser.CreateSubKey(RegPath);
+					key.SetValue(DarkModeKey, value ? 1 : 0, RegistryValueKind.DWord);
+					}
+				catch { }
+				}
+			}
 
 		public static bool ShowHiddenFiles
 			{
