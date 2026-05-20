@@ -5,7 +5,7 @@ namespace AsyncExplorer.Services
 	{
 	public class AsyncDirectoryController
 		{
-		private readonly ListBox _fileList;
+		private readonly ListView _fileList;
 		private readonly TextBox _pathInput;
 		private readonly Label _statusLabel;
 		private readonly Button _btnScan;
@@ -15,7 +15,7 @@ namespace AsyncExplorer.Services
 		private readonly Action<Exception> _logError;
 		private readonly Stack<string> _navigationStack = new Stack<string>();
 
-		public AsyncDirectoryController(ListBox fileList, TextBox pathInput, Label statusLabel,
+		public AsyncDirectoryController(ListView fileList, TextBox pathInput, Label statusLabel,
 			Button btnScan, Button btnBack, Button btnHome, Button btnRoot, Action<Exception> logError)
 			{
 			_fileList = fileList;
@@ -28,7 +28,7 @@ namespace AsyncExplorer.Services
 			_logError = logError;
 			}
 
-		public void SetupListBox()
+		public void SetupListView()
 			{
 			_fileList.MouseDoubleClick -= OnItemDoubleClick;
 			_fileList.MouseDoubleClick += OnItemDoubleClick;
@@ -36,13 +36,10 @@ namespace AsyncExplorer.Services
 
 		private void OnItemDoubleClick(object? sender, MouseEventArgs e)
 			{
-			int index = _fileList.IndexFromPoint(e.Location);
-			if (index == ListBox.NoMatches) return;
+			ListViewItem? item = _fileList.GetItemAt(e.X, e.Y);
+			if (item == null || item.Tag is not FileItem fileItem) return;
 
-			object? obj = _fileList.Items[index];
-			if (obj is not FileItem item) return;
-
-			OpenSelectedItem(item);
+			OpenSelectedItem(fileItem);
 			}
 
 		public void OpenSelectedItem(FileItem item)
@@ -89,13 +86,14 @@ namespace AsyncExplorer.Services
 			_pathInput.Text = normalizedTarget;
 
 			_fileList.Items.Clear();
+			_fileList.SmallImageList?.Images.Clear();
 			_btnScan.Enabled = false;
 			_statusLabel.Text = path == "::DRIVES::" ? "Listing Drives..." : "Scanning...";
 
-			var progress = new Progress<FileItem>(fileName =>
+			var progress = new Progress<ListViewItem>(item =>
 			{
-				_fileList.Items.Add(fileName);
-				_fileList.TopIndex = _fileList.Items.Count - 1;
+				_fileList.Items.Add(item);
+				_fileList.EnsureVisible(_fileList.Items.Count - 1);
 			});
 
 			try
@@ -112,7 +110,7 @@ namespace AsyncExplorer.Services
 			finally
 				{
 				_btnScan.Enabled = true;
-				SetupListBox();
+				SetupListView();
 				if (AppSettings.HomeOrRoot)
 					{
 					_btnHome.Enabled = true;
@@ -126,7 +124,7 @@ namespace AsyncExplorer.Services
 				}
 			}
 
-		private void PerformFilesystemWork(string path, IProgress<FileItem> progress)
+		private void PerformFilesystemWork(string path, IProgress<ListViewItem> progress)
 			{
 			try
 				{
@@ -136,12 +134,18 @@ namespace AsyncExplorer.Services
 						{
 						if (drive.IsReady)
 							{
-							progress.Report(new FileItem
+							string driveName = $"{drive.Name} {(string.IsNullOrEmpty(drive.VolumeLabel) ? "" : $"({drive.VolumeLabel})")}";
+							string fullPath = drive.RootDirectory.FullName;
+							
+							var item = new FileItem
 								{
-								Name = $"{drive.Name} {(string.IsNullOrEmpty(drive.VolumeLabel) ? "" : $"({drive.VolumeLabel})")}",
-								FullPath = drive.RootDirectory.FullName,
+								Name = driveName,
+								FullPath = fullPath,
 								IsDirectory = true
-								});
+								};
+
+							var lvItem = CreateListViewItem(item);
+							progress.Report(lvItem);
 							}
 						}
 					return;
@@ -160,12 +164,15 @@ namespace AsyncExplorer.Services
 							continue;
 							}
 
-						progress.Report(new FileItem
+						var item = new FileItem
 							{
 							Name = info.Name,
 							FullPath = info.FullName,
 							IsDirectory = (info.Attributes & FileAttributes.Directory) != 0
-							});
+							};
+
+						var lvItem = CreateListViewItem(item);
+						progress.Report(lvItem);
 						}
 					catch (UnauthorizedAccessException uae)
 						{
@@ -177,6 +184,40 @@ namespace AsyncExplorer.Services
 				{
 				_logError(ex);
 				}
+			}
+
+		private ListViewItem CreateListViewItem(FileItem item)
+			{
+			var lvItem = new ListViewItem(item.Name)
+				{
+				Tag = item
+				};
+
+			if (AppSettings.UseIcons && _fileList.SmallImageList != null)
+				{
+				string imageKey = item.IsDirectory ? "folder" : Path.GetExtension(item.FullPath).ToLower();
+				if (string.IsNullOrEmpty(imageKey)) imageKey = "file";
+
+				// We need to ensure the icon is in the ImageList. 
+				// Since we're on a background thread, we need to Invoke to add to ImageList.
+				if (!_fileList.SmallImageList.Images.ContainsKey(imageKey))
+					{
+					_fileList.Invoke((MethodInvoker)delegate
+					{
+						if (!_fileList.SmallImageList.Images.ContainsKey(imageKey))
+							{
+							Icon? icon = IconHelper.GetIcon(item.FullPath, item.IsDirectory);
+							if (icon != null)
+								{
+								_fileList.SmallImageList.Images.Add(imageKey, icon);
+								}
+							}
+					});
+					}
+				lvItem.ImageKey = imageKey;
+				}
+
+			return lvItem;
 			}
 
 		public async Task GoBack()
@@ -243,6 +284,129 @@ namespace AsyncExplorer.Services
 		public async Task GoDrives()
 			{
 			await StartScanAsync("::DRIVES::");
+			}
+
+		public async Task CreateNewFolderAsync()
+			{
+			string currentPath = _pathInput.Text;
+			if (currentPath == "::DRIVES::" || currentPath == "This PC" || !Directory.Exists(currentPath))
+				{
+				MessageBox.Show("Cannot create a folder in this location.");
+				return;
+				}
+
+			string? folderName = ShowInputDialog("Enter folder name:", "New Folder");
+			if (string.IsNullOrWhiteSpace(folderName)) return;
+
+			string newPath = Path.Combine(currentPath, folderName);
+			if (Directory.Exists(newPath))
+				{
+				MessageBox.Show("Folder already exists.");
+				return;
+				}
+
+			try
+				{
+				Directory.CreateDirectory(newPath);
+				await StartScanAsync(currentPath);
+				}
+			catch (Exception ex)
+				{
+				_logError(ex);
+				MessageBox.Show($"Error creating folder: {ex.Message}");
+				}
+			}
+
+		public async Task CreateNewFileAsync()
+			{
+			string currentPath = _pathInput.Text;
+			if (currentPath == "::DRIVES::" || currentPath == "This PC" || !Directory.Exists(currentPath))
+				{
+				MessageBox.Show("Cannot create a file in this location.");
+				return;
+				}
+
+			string? fileName = ShowInputDialog("Enter file name:", "New File");
+			if (string.IsNullOrWhiteSpace(fileName)) return;
+
+			string newPath = Path.Combine(currentPath, fileName);
+			if (File.Exists(newPath))
+				{
+				MessageBox.Show("File already exists.");
+				return;
+				}
+
+			try
+				{
+				using (File.Create(newPath)) { }
+				await StartScanAsync(currentPath);
+				}
+			catch (Exception ex)
+				{
+				_logError(ex);
+				MessageBox.Show($"Error creating file: {ex.Message}");
+				}
+			}
+
+		private string? ShowInputDialog(string text, string caption)
+			{
+			bool isDark = AppSettings.DarkMode;
+			Color bgColor = isDark ? Color.FromArgb(30, 30, 30) : SystemColors.Control;
+			Color fgColor = isDark ? Color.White : SystemColors.ControlText;
+			Color inputBg = isDark ? Color.FromArgb(45, 45, 48) : SystemColors.Window;
+			Color btnBg = isDark ? Color.FromArgb(60, 60, 60) : SystemColors.Control;
+
+			Form prompt = new Form()
+				{
+				Width = 400,
+				Height = 160,
+				FormBorderStyle = FormBorderStyle.FixedDialog,
+				Text = caption,
+				StartPosition = FormStartPosition.CenterParent,
+				MaximizeBox = false,
+				MinimizeBox = false,
+				BackColor = bgColor,
+				ForeColor = fgColor
+				};
+
+			Label textLabel = new Label() { Left = 20, Top = 20, Text = text, Width = 350, ForeColor = fgColor };
+			TextBox textBox = new TextBox() { Left = 20, Top = 50, Width = 350, BackColor = inputBg, ForeColor = fgColor };
+			
+			Button confirmation = new Button() 
+				{ 
+				Text = "OK", 
+				Left = 270, 
+				Width = 100, 
+				Top = 90, 
+				DialogResult = DialogResult.OK,
+				BackColor = btnBg,
+				ForeColor = fgColor,
+				FlatStyle = isDark ? FlatStyle.Flat : FlatStyle.Standard
+				};
+			
+			Button cancel = new Button() 
+				{ 
+				Text = "Cancel", 
+				Left = 160, 
+				Width = 100, 
+				Top = 90, 
+				DialogResult = DialogResult.Cancel,
+				BackColor = btnBg,
+				ForeColor = fgColor,
+				FlatStyle = isDark ? FlatStyle.Flat : FlatStyle.Standard
+				};
+
+			confirmation.Click += (sender, e) => { prompt.Close(); };
+			cancel.Click += (sender, e) => { prompt.Close(); };
+
+			prompt.Controls.Add(textBox);
+			prompt.Controls.Add(confirmation);
+			prompt.Controls.Add(cancel);
+			prompt.Controls.Add(textLabel);
+			prompt.AcceptButton = confirmation;
+			prompt.CancelButton = cancel;
+
+			return prompt.ShowDialog(_fileList.FindForm()) == DialogResult.OK ? textBox.Text : null;
 			}
 		}
 	}

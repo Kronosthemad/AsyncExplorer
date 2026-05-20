@@ -9,11 +9,7 @@ namespace AsyncExplorer.Model
         public bool IsDirectory { get; set; }
         public override string ToString()
             {
-            if (AppSettings.UseIcons)
-                {
-                return $"{(IsDirectory ? "[📁]" : "[💽]")} {Name}";
-                }
-            return $"{(IsDirectory ? "[DIR]" : "[FILE]")} {Name}";
+            return Name;
             }
         }
     }

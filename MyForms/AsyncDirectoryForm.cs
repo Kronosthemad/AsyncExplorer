@@ -6,7 +6,8 @@ namespace AsyncExplorer
 	{
 	public class AsyncDirectoryForm : Form
 		{
-		private ListBox _fileList;
+		private ListView _fileList;
+		private ImageList _smallIcons;
 		private Button _btnScan;
 		private Button _btnhome;
 		private Button _btnDrives;
@@ -28,43 +29,38 @@ namespace AsyncExplorer
 			this.Text = "Async Internal Explorer";
 			this.Size = new Size(700, 550);
 
+			// Setup ImageList
+			_smallIcons = new ImageList
+				{
+				ColorDepth = ColorDepth.Depth32Bit,
+				ImageSize = new Size(16, 16)
+				};
+
 			// Setup Context Menu
 			_contextMenu = new ContextMenuStrip();
 			var settingsItem = new ToolStripMenuItem("Settings...", null, settingsMenuItem_Click);
 #pragma warning disable CS8602 // Dereference of a possibly null reference.
 			var refreshItem = new ToolStripMenuItem("Refresh", null, async (s, e) => await StartScanAsync(_pathInput.Text));
 #pragma warning restore CS8602 // Dereference of a possibly null reference.
-			var openItem = new ToolStripMenuItem("Open", null, async (s, e) =>
+
+			var newItem = new ToolStripMenuItem("New");
+			var newFolderItem = new ToolStripMenuItem("Folder", null, async (s, e) => await CreateNewFolderAsync());
+			var newFileItem = new ToolStripMenuItem("File", null, async (s, e) => await CreateNewFileAsync());
+			newItem.DropDownItems.Add(newFolderItem);
+			newItem.DropDownItems.Add(newFileItem);
+
+			var openItem = new ToolStripMenuItem("Open", null, (s, e) =>
 				{
 #pragma warning disable CS8602 // Dereference of a possibly null reference.
-					if (_fileList.SelectedItem is FileItem selectedItem)
+					if (_fileList.SelectedItems.Count > 0 && _fileList.SelectedItems[0].Tag is FileItem selectedItem)
 						{
-						try
-							{
-							if (selectedItem.IsDirectory)
-								{
-								await StartScanAsync(selectedItem.FullPath);
-								}
-							else
-								{
-								ProcessStartInfo startInfo = new ProcessStartInfo
-									{
-									FileName = selectedItem.FullPath,
-									UseShellExecute = true
-									};
-								Process.Start(startInfo);
-								}
-							}
-						catch (Exception ex)
-							{
-							MessageBox.Show($"Could not open item: {ex.Message}");
-							LogError(ex);
-							}
+						_controller.OpenSelectedItem(selectedItem);
 						}
 #pragma warning restore CS8602 // Dereference of a possibly null reference.
 				});
 			_contextMenu.Items.Add(settingsItem);
 			_contextMenu.Items.Add(refreshItem);
+			_contextMenu.Items.Add(newItem);
 			_contextMenu.Items.Add(openItem);
 			this.ContextMenuStrip = _contextMenu;
 
@@ -97,14 +93,18 @@ namespace AsyncExplorer
 				Padding = new Padding(10)
 				};
 
-			// 3. Setup the ListBox
-			_fileList = new ListBox
+			// 3. Setup the ListView
+			_fileList = new ListView
 				{
 				Dock = DockStyle.Fill,
-				Font = new Font("Consolas", 12),
-				//IntegralHeight = false,
+				View = View.Details,
+				FullRowSelect = true,
+				HeaderStyle = ColumnHeaderStyle.None,
+				SmallImageList = _smallIcons,
+				MultiSelect = false,
 				ContextMenuStrip = _contextMenu
 				};
+			_fileList.Columns.Add("Name", -2); // -2 means auto-fill
 
 			// 4. Setup search bar
 			_pathInput = new TextBox
@@ -233,7 +233,7 @@ namespace AsyncExplorer
 				_btnScan, _btnBack, _btnhome, _btnRoot, LogError);
 
 			// Let controller wire-up listbox double-click
-			_controller.SetupListBox();
+			_controller.SetupListView();
 
 			// Add controls to the form: main split fills, then info panel docks to bottom
 			this.Controls.Add(_mainSplit);   // Fill remaining
@@ -315,35 +315,14 @@ namespace AsyncExplorer
 			await _controller.StartScanAsync(path, isBackNavigation);
 			}
 
-		private async void OnItemDoubleClick(object? sender, MouseEventArgs e)
+		private async Task CreateNewFolderAsync()
 			{
-			int index = _fileList.IndexFromPoint(e.Location);
-			if (index == ListBox.NoMatches) return;
+			await _controller.CreateNewFolderAsync();
+			}
 
-			object? obj = _fileList.Items[index];
-			if (obj is not FileItem item) return;
-
-			try
-				{
-				if (item.IsDirectory)
-					{
-					await StartScanAsync(item.FullPath);
-					}
-				else
-					{
-					ProcessStartInfo startInfo = new ProcessStartInfo
-						{
-						FileName = item.FullPath,
-						UseShellExecute = true
-						};
-					Process.Start(startInfo);
-					}
-				}
-			catch (Exception ex)
-				{
-				MessageBox.Show($"Could not open item: {ex.Message}");
-				LogError(ex);
-				}
+		private async Task CreateNewFileAsync()
+			{
+			await _controller.CreateNewFileAsync();
 			}
 
 		private async void Utility_Load(object? sender, EventArgs e)
